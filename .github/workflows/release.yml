@@ -2,30 +2,278 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
         with:
-          node-version-file: .nvmrc
-          cache: npm
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
       - run: npm ci
-      - run: npm run icons
-      - run: npm run pack
+
+      - name: Determine next version from tags
+        id: version
+        run: |
+          latest=$(git tag --list 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$latest" ]; then
+            next="1.0.0"
+          else
+            IFS='.' read -r major minor patch <<< "${latest#v}"
+            next="$major.$minor.$((patch + 1))"
+          fi
+          echo "version=$next" >> "$GITHUB_OUTPUT"
+          echo "tag=v$next" >> "$GITHUB_OUTPUT"
+          echo "Next version: $next (previous: ${latest:-none})"
+
+      - name: Build with version
+        run: npm run icons && npm run pack
+        env:
+          DISCORD_PURGE_VERSION: ${{ steps.version.outputs.version }}
+
+      - name: Tag release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Generate release notes
+        run: |
+          PREV_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n2 | tail -1)
+          if [ -n "$PREV_TAG" ]; then
+            git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" > dist/release-notes.txt
+          else
+            echo "- Initial release" > dist/release-notes.txt
+          fi
+
+      - name: Package source code for AMO review
+        run: git archive --format=zip --prefix=discord-purge-source/ -o dist/discord-purge-source.zip HEAD
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
           files: |
             dist/chrome.zip
             dist/firefox.xpi
             dist/discord-purge.user.js
-          generate_release_notes: true
-          fail_on_unmatched_files: true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: extensions
+          path: |
+            dist/chrome.zip
+            dist/firefox.xpi
+            dist/discord-purge.user.js
+            dist/discord-purge-source.zip
+            dist/release-notes.txt
+
+  publish-chrome:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: extensions
+
+      - name: Publish to Chrome Web Store
+        run: |
+          TOKEN_RESPONSE=$(curl -s -X POST https://oauth2.googleapis.com/token \
+            -d "client_id=${{ secrets.CHROME_CLIENT_ID }}" \
+            -d "client_secret=${{ secrets.CHROME_CLIENT_SECRET }}" \
+            -d "refresh_token=${{ secrets.CHROME_REFRESH_TOKEN }}" \
+            -d "grant_type=refresh_token")
+
+          ACCESS_TOKEN=$(echo "$TOKEN_RESPONSE" | jq -r '.access_token')
+
+          if [ "$ACCESS_TOKEN" = "null" ] || [ -z "$ACCESS_TOKEN" ]; then
+            echo "Failed to get access token"
+            echo "$TOKEN_RESPONSE"
+            exit 1
+          fi
+
+          UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "x-goog-api-version: 2" \
+            -X PUT \
+            -T chrome.zip \
+            "https://www.googleapis.com/upload/chromewebstore/v1.1/items/${{ secrets.CHROME_EXTENSION_ID }}")
+
+          HTTP_CODE=$(echo "$UPLOAD_RESPONSE" | tail -1)
+          BODY=$(echo "$UPLOAD_RESPONSE" | sed '$d')
+          echo "Upload ($HTTP_CODE): $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Upload failed"
+            exit 1
+          fi
+
+          PUBLISH_RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "x-goog-api-version: 2" \
+            -H "Content-Length: 0" \
+            -X POST \
+            "https://www.googleapis.com/chromewebstore/v1.1/items/${{ secrets.CHROME_EXTENSION_ID }}/publish")
+
+          HTTP_CODE=$(echo "$PUBLISH_RESPONSE" | tail -1)
+          BODY=$(echo "$PUBLISH_RESPONSE" | sed '$d')
+          echo "Publish ($HTTP_CODE): $BODY"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            if echo "$BODY" | grep -q "in review"; then
+              echo "::warning::Chrome Web Store publish skipped: item is still in review"
+            else
+              echo "Publish failed"
+              exit 1
+            fi
+          fi
+
+  publish-firefox:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: extensions
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Publish to Mozilla Add-ons
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          AMO_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          generate_jwt() {
+            node -e "
+              const crypto = require('crypto');
+              const h = Buffer.from(JSON.stringify({alg:'HS256',typ:'JWT'})).toString('base64url');
+              const now = Math.floor(Date.now()/1000);
+              const p = Buffer.from(JSON.stringify({
+                iss: process.env.AMO_API_KEY,
+                iat: now,
+                exp: now + 300,
+                jti: crypto.randomUUID()
+              })).toString('base64url');
+              const s = crypto.createHmac('sha256', process.env.AMO_API_SECRET)
+                .update(h+'.'+p).digest('base64url');
+              console.log(h+'.'+p+'.'+s);
+            "
+          }
+
+          # Retry wrapper for 429 rate limits (up to 3 attempts, max 120s wait)
+          amo_curl() {
+            for attempt in 1 2 3; do
+              JWT=$(generate_jwt)
+              RESPONSE=$(curl -s -w "\n%{http_code}" -H "Authorization: JWT $JWT" "$@")
+              HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+              if [ "$HTTP_CODE" = "429" ]; then
+                RETRY_AFTER=$(echo "$RESPONSE" | sed '$d' | jq -r '.retry_after // 30')
+                if [ "$RETRY_AFTER" -gt 120 ] 2>/dev/null; then
+                  echo "Rate limited (429) but retry_after=${RETRY_AFTER}s exceeds 120s cap, giving up"
+                  echo "$RESPONSE"
+                  return 1
+                fi
+                echo "Rate limited (429), retrying in ${RETRY_AFTER}s (attempt $attempt/3)"
+                sleep "$RETRY_AFTER"
+              else
+                echo "$RESPONSE"
+                return 0
+              fi
+            done
+            echo "$RESPONSE"
+            return 1
+          }
+
+          AMO_BASE="https://addons.mozilla.org/api/v5"
+          ADDON_ID="discord-purge@dustfeather"
+
+          # Upload .xpi
+          UPLOAD_RESPONSE=$(amo_curl \
+            -F "upload=@firefox.xpi" \
+            -F "channel=listed" \
+            "$AMO_BASE/addons/upload/")
+          UPLOAD_RESPONSE=$(echo "$UPLOAD_RESPONSE" | sed '$d')
+
+          UPLOAD_UUID=$(echo "$UPLOAD_RESPONSE" | jq -r '.uuid')
+          echo "Upload UUID: $UPLOAD_UUID"
+
+          if [ "$UPLOAD_UUID" = "null" ] || [ -z "$UPLOAD_UUID" ]; then
+            echo "Upload failed: $UPLOAD_RESPONSE"
+            exit 1
+          fi
+
+          # Poll for validation (max 10 minutes)
+          PROCESSED="false"
+          for i in $(seq 1 60); do
+            sleep 10
+            POLL_RESPONSE=$(amo_curl "$AMO_BASE/addons/upload/$UPLOAD_UUID/")
+            STATUS=$(echo "$POLL_RESPONSE" | sed '$d')
+
+            PROCESSED=$(echo "$STATUS" | jq -r '.processed')
+            VALID=$(echo "$STATUS" | jq -r '.valid')
+            echo "Poll $i: processed=$PROCESSED valid=$VALID"
+
+            if [ "$PROCESSED" = "true" ]; then
+              if [ "$VALID" = "true" ]; then
+                echo "Validation passed"
+                break
+              else
+                echo "Validation failed:"
+                echo "$STATUS" | jq '.validation.messages'
+                exit 1
+              fi
+            fi
+          done
+
+          if [ "$PROCESSED" != "true" ]; then
+            echo "Validation timed out"
+            exit 1
+          fi
+
+          # Create new version with source code and release notes
+          NOTES=$(cat release-notes.txt)
+          RELEASE_NOTES=$(jq -n --arg notes "$NOTES" '{"en-US": $notes}')
+
+          VERSION_RESPONSE=$(amo_curl \
+            -F "upload=$UPLOAD_UUID" \
+            -F "source=@discord-purge-source.zip" \
+            -F "release_notes=$RELEASE_NOTES" \
+            "$AMO_BASE/addons/addon/$ADDON_ID/versions/")
+
+          HTTP_CODE=$(echo "$VERSION_RESPONSE" | tail -1)
+          BODY=$(echo "$VERSION_RESPONSE" | sed '$d')
+          echo "Version create ($HTTP_CODE): $BODY"
+
+          if [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "200" ]; then
+            if echo "$BODY" | grep -q "in review"; then
+              echo "::warning::AMO publish skipped: previous version still in review"
+            else
+              echo "Version creation failed"
+              exit 1
+            fi
+          fi
