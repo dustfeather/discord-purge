@@ -148,10 +148,10 @@ async function buildExtension() {
 }
 
 async function buildUserscript() {
-  await rm(resolve(ROOT, 'dist'), { recursive: true, force: true });
   await mkdir(resolve(ROOT, 'dist'), { recursive: true });
-  const entry = resolve(SRC, 'content/index.ts');
   const out = resolve(ROOT, 'dist', 'discord-purge.user.js');
+  await rm(out, { force: true });
+  const entry = resolve(SRC, 'content/index.ts');
 
   const result = await build({
     entryPoints: [entry],
