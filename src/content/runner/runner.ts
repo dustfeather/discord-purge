@@ -1,6 +1,6 @@
 import { RUN_CONFIG } from '../../shared/constants.js';
 import type { ApiClient } from '../api/client.js';
-import type { DiscordUser } from '../api/types.js';
+import type { DiscordMessage, DiscordUser } from '../api/types.js';
 import type { Logger } from '../log/log.js';
 import type { Boundary, RunStats } from '../../shared/types.js';
 import { backoffMs, jitteredSleep, readRetryAfterMs, sleep } from './scheduler.js';
@@ -22,6 +22,10 @@ export const emptyStats = (): RunStats => ({
   alreadyGone: 0,
   forbidden: 0,
   errors: 0,
+  phase: 'idle',
+  collectingPage: 0,
+  totalCandidates: 0,
+  phaseStartedAt: null,
 });
 
 export const runPurge = async ({
@@ -42,11 +46,20 @@ export const runPurge = async ({
     logger.append(`run: boundary snowflake = ${boundarySnowflake.toString()}`);
   }
 
+  // Phase 1: collect candidates by walking history.
+  stats.phase = 'collecting';
+  emit();
+
+  const targets: DiscordMessage[] = [];
   let cursor: string | undefined;
   while (!signal.aborted) {
+    stats.collectingPage++;
     let page: Awaited<ReturnType<ApiClient['listMessages']>>;
     try {
-      page = await api.listMessages(channelId, cursor ? { limit: 100, before: cursor } : { limit: 100 });
+      page = await api.listMessages(
+        channelId,
+        cursor ? { limit: 100, before: cursor } : { limit: 100 },
+      );
     } catch (e) {
       stats.errors++;
       logger.append(`list failed: ${(e as Error).message}`);
@@ -54,74 +67,86 @@ export const runPurge = async ({
       return stats;
     }
     if (page.length === 0) {
-      logger.append('done: history exhausted');
+      logger.append('collect: history exhausted');
       break;
     }
     cursor = page[page.length - 1]!.id;
     stats.scanned += page.length;
 
-    const targets = page.filter((m) => candidate(m, me.id, boundarySnowflake));
-    const skippedThisPage = page.length - targets.length;
-    stats.skipped += skippedThisPage;
+    const pageTargets = page.filter((m) => candidate(m, me.id, boundarySnowflake));
+    stats.skipped += page.length - pageTargets.length;
+    targets.push(...pageTargets);
     emit();
+  }
 
-    for (const m of targets) {
-      if (signal.aborted) {
-        logger.append('aborted');
-        emit();
-        return stats;
-      }
-      await jitteredSleep(RUN_CONFIG.baseDelayMs, signal).catch(() => undefined);
-      if (signal.aborted) return stats;
+  if (signal.aborted) {
+    logger.append('aborted during collect');
+    return stats;
+  }
 
-      let attempt = 0;
-      let succeeded = false;
-      while (attempt < RUN_CONFIG.maxAttempts && !signal.aborted) {
-        const res = await api.deleteMessage(channelId, m.id);
-        if (res.status === 204) {
-          stats.deleted++;
-          succeeded = true;
-          emit();
-          break;
-        }
-        if (res.status === 404) {
-          stats.alreadyGone++;
-          succeeded = true;
-          emit();
-          break;
-        }
-        if (res.status === 403) {
-          stats.forbidden++;
-          logger.append(`forbidden ${m.id}`);
-          succeeded = true;
-          emit();
-          break;
-        }
-        if (res.status === 429) {
-          const wait = await readRetryAfterMs({ headers: res.headers, body: res.body });
-          logger.append(`rate-limited; sleeping ${wait} ms`);
-          await sleep(wait, signal).catch(() => undefined);
-          attempt++;
-          continue;
-        }
-        if (res.status >= 500) {
-          const wait = backoffMs(attempt);
-          logger.append(`server ${res.status}; backoff ${wait} ms`);
-          await sleep(wait, signal).catch(() => undefined);
-          attempt++;
-          continue;
-        }
-        stats.errors++;
-        logger.append(`unexpected ${res.status} for ${m.id}`);
+  // Phase 2: delete collected candidates.
+  stats.phase = 'deleting';
+  stats.totalCandidates = targets.length;
+  stats.phaseStartedAt = Date.now();
+  logger.append(`collect: ${targets.length} candidate(s) found; starting delete`);
+  emit();
+
+  for (const m of targets) {
+    if (signal.aborted) {
+      logger.append('aborted');
+      emit();
+      return stats;
+    }
+    await jitteredSleep(RUN_CONFIG.baseDelayMs, signal).catch(() => undefined);
+    if (signal.aborted) return stats;
+
+    let attempt = 0;
+    let succeeded = false;
+    while (attempt < RUN_CONFIG.maxAttempts && !signal.aborted) {
+      const res = await api.deleteMessage(channelId, m.id);
+      if (res.status === 204) {
+        stats.deleted++;
         succeeded = true;
         emit();
         break;
       }
-      if (!succeeded) {
-        stats.errors++;
-        logger.append(`gave up on ${m.id} after ${RUN_CONFIG.maxAttempts} attempts`);
+      if (res.status === 404) {
+        stats.alreadyGone++;
+        succeeded = true;
         emit();
+        break;
       }
+      if (res.status === 403) {
+        stats.forbidden++;
+        logger.append(`forbidden ${m.id}`);
+        succeeded = true;
+        emit();
+        break;
+      }
+      if (res.status === 429) {
+        const wait = await readRetryAfterMs({ headers: res.headers, body: res.body });
+        logger.append(`rate-limited; sleeping ${wait} ms`);
+        await sleep(wait, signal).catch(() => undefined);
+        attempt++;
+        continue;
+      }
+      if (res.status >= 500) {
+        const wait = backoffMs(attempt);
+        logger.append(`server ${res.status}; backoff ${wait} ms`);
+        await sleep(wait, signal).catch(() => undefined);
+        attempt++;
+        continue;
+      }
+      stats.errors++;
+      logger.append(`unexpected ${res.status} for ${m.id}`);
+      succeeded = true;
+      emit();
+      break;
+    }
+    if (!succeeded) {
+      stats.errors++;
+      logger.append(`gave up on ${m.id} after ${RUN_CONFIG.maxAttempts} attempts`);
+      emit();
     }
   }
   return stats;

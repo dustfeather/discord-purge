@@ -7,6 +7,7 @@ import { renderSection } from './components/section.js';
 import { renderTarget } from './components/target.js';
 import { renderBoundary } from './components/boundary.js';
 import { renderStats } from './components/stats.js';
+import { renderProgress } from './components/progress.js';
 import { renderLogBox } from './components/log.js';
 import { renderPrimaryButton } from './components/primaryBtn.js';
 import type { Logger } from '../log/log.js';
@@ -18,6 +19,7 @@ export type PanelApi = {
   setState(s: PanelState): void;
   setStats(s: RunStats): void;
   setChannel(channel: DiscordChannel | null): void;
+  setChannelId(id: string | null): void;
   hide(): void;
   show(): void;
   destroy(): void;
@@ -81,16 +83,27 @@ export const mountPanel = async (logger: Logger): Promise<PanelApi> => {
     },
   });
 
+  let currentChannelId: string | null = null;
   const target = renderTarget();
-  const boundary = renderBoundary();
+  const boundary = renderBoundary({
+    getChannelId: () => currentChannelId,
+    ignoreRoot: host,
+  });
   const stats = renderStats();
+  const progress = renderProgress();
   const logBox = renderLogBox(logger);
   const primary = renderPrimaryButton();
+
+  const statsSection = renderSection('Stats', stats.el);
+  statsSection.style.display = 'none';
+  const progressSection = renderSection('Progress', progress.el);
+  progressSection.style.display = 'none';
 
   const body = h('div', { className: 'panel-body' }, [
     renderSection('Target', target.el),
     renderSection('Boundary', boundary.el),
-    renderSection('Stats', stats.el),
+    progressSection,
+    statsSection,
     renderSection('Log', logBox.el),
     primary.el,
   ]);
@@ -118,21 +131,35 @@ export const mountPanel = async (logger: Logger): Promise<PanelApi> => {
     switch (s) {
       case 'loading-auth':
         primary.set({ kind: 'loading', label: 'Waiting for Discord…' });
+        statsSection.style.display = 'none';
+        progressSection.style.display = 'none';
+        progress.reset();
         break;
       case 'ready':
         primary.set({ kind: 'idle', label: 'Start', onClick: () => onStart() });
+        statsSection.style.display = 'none';
+        progressSection.style.display = 'none';
+        progress.reset();
         break;
       case 'running':
         primary.set({ kind: 'running', label: 'Cancel', onClick: () => onCancel() });
+        statsSection.style.display = 'none';
+        progressSection.style.display = '';
         break;
       case 'cancelling':
         primary.set({ kind: 'cancelling', label: 'Cancelling…' });
+        statsSection.style.display = 'none';
+        progressSection.style.display = '';
         break;
       case 'done':
         primary.set({ kind: 'idle', label: 'Run again', onClick: () => onStart() });
+        statsSection.style.display = '';
+        progressSection.style.display = 'none';
         break;
       case 'error':
         primary.set({ kind: 'idle', label: 'Try again', onClick: () => onStart() });
+        statsSection.style.display = '';
+        progressSection.style.display = 'none';
         break;
     }
   };
@@ -140,8 +167,14 @@ export const mountPanel = async (logger: Logger): Promise<PanelApi> => {
 
   return {
     setState: applyState,
-    setStats: (s) => stats.update(s),
+    setStats: (s) => {
+      stats.update(s);
+      progress.update(s);
+    },
     setChannel: (c) => target.setChannel(c),
+    setChannelId: (id) => {
+      currentChannelId = id;
+    },
     hide() {
       panel.style.display = 'none';
     },
