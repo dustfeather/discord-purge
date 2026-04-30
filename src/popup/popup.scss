@@ -1,0 +1,25 @@
+:root {
+  --bg: #313338;
+  --fg: #DBDEE1;
+  --muted: #949BA4;
+  --brand: #5865F2;
+  --brand-hover: #4752C4;
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #FFFFFF; --fg: #2E3338; --muted: #5C5E66; }
+}
+html, body { margin: 0; }
+body {
+  font: 13px/1.4 'gg sans', 'Noto Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  width: 280px;
+  padding: 12px 14px;
+}
+h1 { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
+p { margin: 0 0 10px; color: var(--muted); }
+button {
+  width: 100%; height: 32px; border: none; border-radius: 3px;
+  background: var(--brand); color: white; font-weight: 500; cursor: pointer;
+}
+button:hover { background: var(--brand-hover); }
