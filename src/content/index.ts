@@ -86,11 +86,13 @@ const applyLocation = async (): Promise<void> => {
   if (!panel) return;
   const loc = readLocation();
   if (!loc.isDm || !loc.channelId) {
+    panel.setChannelId(null);
     panel.hide();
     if (abort) cancel();
     return;
   }
   panel.show();
+  panel.setChannelId(loc.channelId);
   panel.setChannel(null);
   if (getAuth()?.authorization) {
     try {
