@@ -91,13 +91,14 @@ export const runPurge = async ({
   logger.append(`collect: ${targets.length} candidate(s) found; starting delete`);
   emit();
 
+  let currentDelay: number = RUN_CONFIG.baseDelayMs;
   for (const m of targets) {
     if (signal.aborted) {
       logger.append('aborted');
       emit();
       return stats;
     }
-    await jitteredSleep(RUN_CONFIG.baseDelayMs, signal).catch(() => undefined);
+    await jitteredSleep(currentDelay, signal).catch(() => undefined);
     if (signal.aborted) return stats;
 
     let attempt = 0;
@@ -125,7 +126,10 @@ export const runPurge = async ({
       }
       if (res.status === 429) {
         const wait = await readRetryAfterMs({ headers: res.headers, body: res.body });
-        logger.append(`rate-limited; sleeping ${wait} ms`);
+        currentDelay = Math.min(currentDelay + RUN_CONFIG.delayBumpMs, RUN_CONFIG.maxDelayMs);
+        logger.append(
+          `rate-limited; sleeping ${wait} ms, raising base delay to ${currentDelay} ms`,
+        );
         await sleep(wait, signal).catch(() => undefined);
         attempt++;
         continue;

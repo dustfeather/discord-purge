@@ -10,8 +10,10 @@ export const ROUTE_DM_REGEX = /^\/channels\/@me\/(\d{15,25})(?:\/.*)?$/;
 
 export const RUN_CONFIG = {
   baseDelayMs: 3500,
-  jitterRatio: 0.3,
-  maxAttempts: 5,
+  jitterMs: 500,
+  maxDelayMs: 15000,
+  delayBumpMs: 1000,
+  maxAttempts: 3,
   minRetryAfterMs: 5000,
   backoffCapMs: 30000,
 } as const;

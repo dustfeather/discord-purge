@@ -21,7 +21,7 @@ export const jitteredSleep = (
   baseMs: number = RUN_CONFIG.baseDelayMs,
   signal?: AbortSignal,
 ): Promise<void> => {
-  const jitter = baseMs * RUN_CONFIG.jitterRatio;
+  const jitter = RUN_CONFIG.jitterMs;
   const ms = Math.max(0, baseMs + (Math.random() * 2 - 1) * jitter);
   return sleep(ms, signal);
 };
