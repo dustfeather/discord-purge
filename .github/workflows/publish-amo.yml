@@ -1,0 +1,32 @@
+name: Publish AMO
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: ${{ vars.PUBLISH_AMO == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run icons
+      - run: npm run build:firefox && npm run pack:firefox
+      - name: Submit to AMO
+        uses: kewisch/action-web-ext@v1
+        with:
+          cmd: sign
+          source: dist/firefox.xpi
+          channel: listed
+          apiKey: ${{ secrets.AMO_API_KEY }}
+          apiSecret: ${{ secrets.AMO_API_SECRET }}
+          timeout: 900000
