@@ -1,0 +1,41 @@
+{
+  "name": "discord-purge",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Bulk-unsend your own messages from Discord DMs.",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "tsx scripts/build.ts --target=chrome --watch",
+    "build:chrome": "tsx scripts/build.ts --target=chrome",
+    "build:firefox": "tsx scripts/build.ts --target=firefox",
+    "build:userscript": "tsx scripts/build.ts --target=userscript",
+    "build": "npm run build:chrome && npm run build:firefox && npm run build:userscript",
+    "pack:chrome": "tsx scripts/pack-zip.ts",
+    "pack:firefox": "tsx scripts/pack-xpi.ts",
+    "pack:userscript": "tsx scripts/pack-userscript.ts",
+    "pack": "npm run build && npm run pack:chrome && npm run pack:firefox && npm run pack:userscript",
+    "icons": "tsx scripts/gen-icons.ts",
+    "lint": "eslint . --max-warnings=0 && tsc --noEmit",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.2",
+    "@types/chrome": "^0.0.270",
+    "@types/firefox-webext-browser": "^120.0.4",
+    "@types/node": "^22.7.0",
+    "@typescript-eslint/eslint-plugin": "^8.8.0",
+    "@typescript-eslint/parser": "^8.8.0",
+    "archiver": "^7.0.1",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.11.0",
+    "eslint-plugin-security": "^3.0.1",
+    "globals": "^15.9.0",
+    "prettier": "^3.3.3",
+    "sass": "^1.79.0",
+    "sharp": "^0.33.5",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.0"
+  }
+}
