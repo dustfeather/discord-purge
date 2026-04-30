@@ -5,6 +5,7 @@ export const API_ROOT = `${API_BASE}/${API_VERSION}`;
 export const DISCORD_EPOCH = 1420070400000n; // 2015-01-01T00:00:00Z
 
 export const ROUTE_DM_PATH_PREFIX = '/channels/@me/';
+// eslint-disable-next-line security/detect-unsafe-regex -- bounded \d{15,25}, not ReDoS-vulnerable
 export const ROUTE_DM_REGEX = /^\/channels\/@me\/(\d{15,25})(?:\/.*)?$/;
 
 export const RUN_CONFIG = {
