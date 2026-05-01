@@ -1,4 +1,5 @@
 declare const __FIREFOX_LEGACY__: boolean;
+declare const __USERSCRIPT__: boolean;
 
 // Always run the sniffer module's side-effect — it is idempotent (self-guarded).
 // In userscript mode this is the only place it runs, wrapping page-world fetch/XHR.
@@ -27,6 +28,7 @@ import { runPurge } from './runner/runner.js';
 import { mountPanel, type PanelApi } from './ui/panel.js';
 import { installNavListener, onLocationChange, readLocation } from './ui/nav.js';
 import type { Boundary, RunStats } from '../shared/types.js';
+import type { BgToContent } from '../shared/messages.js';
 
 const RUN_ID =
   typeof crypto !== 'undefined' && crypto.randomUUID
@@ -38,7 +40,26 @@ const logger = new Logger();
 let panel: PanelApi | null = null;
 let abort: AbortController | null = null;
 
+// Userscript users have no extension icon to click — start visible. Extension
+// users get the icon as the entry point — start hidden until they click.
+let panelHidden = !__USERSCRIPT__;
+
 const api = createApiClient({ getAuth, runId: RUN_ID });
+
+const sendBg = (msg: unknown): Promise<unknown> =>
+  new Promise((resolve) => {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.runtime?.sendMessage) {
+        resolve(undefined);
+        return;
+      }
+      chrome.runtime.sendMessage(msg, (resp) => resolve(resp));
+    } catch {
+      resolve(undefined);
+    }
+  });
+
+type BgEnvelope<T> = { ok: true; data: T } | { ok: false; error: string } | undefined;
 
 const cancel = (): void => {
   if (!abort) return;
@@ -82,17 +103,25 @@ const start = async (): Promise<void> => {
   }
 };
 
+const applyVisibility = (): void => {
+  if (!panel) return;
+  const loc = readLocation();
+  const onDm = loc.isDm && !!loc.channelId;
+  if (onDm && !panelHidden) panel.show();
+  else panel.hide();
+};
+
 const applyLocation = async (): Promise<void> => {
   if (!panel) return;
   const loc = readLocation();
   if (!loc.isDm || !loc.channelId) {
     panel.setChannelId(null);
-    panel.hide();
+    applyVisibility();
     if (abort) cancel();
     return;
   }
-  panel.show();
   panel.setChannelId(loc.channelId);
+  applyVisibility();
   panel.setChannel(null);
   if (getAuth()?.authorization) {
     try {
@@ -105,15 +134,43 @@ const applyLocation = async (): Promise<void> => {
   }
 };
 
+const setHidden = (hidden: boolean): void => {
+  panelHidden = hidden;
+  applyVisibility();
+  if (!__USERSCRIPT__) {
+    void sendBg({ kind: 'panel:setHidden', hidden });
+  }
+};
+
 const setupPanel = async (): Promise<void> => {
+  if (!__USERSCRIPT__) {
+    const resp = (await sendBg({ kind: 'panel:getHidden' })) as BgEnvelope<boolean | null>;
+    if (resp && resp.ok && typeof resp.data === 'boolean') {
+      panelHidden = resp.data;
+    }
+  }
+
   panel = await mountPanel(logger);
   panel.onStart(() => void start());
   panel.onCancel(() => cancel());
+  panel.onHideRequested(() => setHidden(true));
   await applyLocation();
+};
+
+const installToggleListener = (): void => {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.onMessage) return;
+  chrome.runtime.onMessage.addListener((message: unknown) => {
+    const m = message as BgToContent | undefined;
+    if (m?.kind === 'panel:toggleVisibility') {
+      setHidden(!panelHidden);
+    }
+    return false;
+  });
 };
 
 const main = async (): Promise<void> => {
   installNavListener();
+  if (!__USERSCRIPT__) installToggleListener();
   await setupPanel();
 
   onAuth(() => {
