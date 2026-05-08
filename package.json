@@ -21,7 +21,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/archiver": "^6.0.2",
+    "@types/archiver": "^7.0.0",
     "@types/chrome": "^0.0.270",
     "@types/firefox-webext-browser": "^120.0.4",
     "@types/node": "^22.7.0",
