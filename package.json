@@ -23,7 +23,7 @@
   "devDependencies": {
     "@types/archiver": "^6.0.2",
     "@types/chrome": "^0.0.270",
-    "@types/firefox-webext-browser": "^120.0.4",
+    "@types/firefox-webext-browser": "^143.0.0",
     "@types/node": "^22.7.0",
     "@typescript-eslint/eslint-plugin": "^8.8.0",
     "@typescript-eslint/parser": "^8.8.0",
