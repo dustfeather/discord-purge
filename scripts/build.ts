@@ -83,16 +83,6 @@ async function copyIcons() {
   await copyAsset('assets/icons/favicon.ico', 'icons/favicon.ico');
 }
 
-async function copyPopup() {
-  const html = await readFile(resolve(SRC, 'popup/popup.html'), 'utf8');
-  await writeFile(resolve(DIST, 'popup.html'), html);
-}
-
-async function compilePopupCss() {
-  const result = sass.compile(resolve(SRC, 'popup/popup.scss'), { style: 'compressed' });
-  await writeFile(resolve(DIST, 'popup.css'), result.css);
-}
-
 const commonExtensionOptions: BuildOptions = {
   bundle: true,
   format: 'iife',
@@ -109,13 +99,10 @@ async function buildExtension() {
   await clean();
   await copyManifest();
   await copyIcons();
-  await copyPopup();
-  await compilePopupCss();
 
   const entries: Record<string, string> = {
     'auth-sniffer': resolve(SRC, 'injected/auth-sniffer.ts'),
     content: resolve(SRC, 'content/index.ts'),
-    popup: resolve(SRC, 'popup/popup.ts'),
   };
   const bgEntry = { background: resolve(SRC, 'background/service-worker.ts') };
   const bgFormat: BuildOptions['format'] = target === 'chrome' ? 'esm' : 'iife';

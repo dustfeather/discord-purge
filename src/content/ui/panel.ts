@@ -26,6 +26,7 @@ export type PanelApi = {
   boundary(): Boundary;
   onStart(cb: () => void): void;
   onCancel(cb: () => void): void;
+  onHideRequested(cb: () => void): void;
 };
 
 const sendBg = <T = unknown>(msg: unknown): Promise<T | undefined> =>
@@ -65,6 +66,7 @@ export const mountPanel = async (logger: Logger): Promise<PanelApi> => {
 
   let onStart: () => void = () => undefined;
   let onCancel: () => void = () => undefined;
+  let onHideRequested: () => void = () => undefined;
 
   const panel = h('div', {
     className: 'panel',
@@ -78,9 +80,7 @@ export const mountPanel = async (logger: Logger): Promise<PanelApi> => {
       panel.dataset['collapsed'] = String(c);
       void sendBg({ kind: 'panel:setCollapsed', collapsed: c });
     },
-    onClose: () => {
-      panel.style.display = 'none';
-    },
+    onClose: () => onHideRequested(),
   });
 
   let currentChannelId: string | null = null;
@@ -193,6 +193,9 @@ export const mountPanel = async (logger: Logger): Promise<PanelApi> => {
     },
     onCancel(cb) {
       onCancel = cb;
+    },
+    onHideRequested(cb) {
+      onHideRequested = cb;
     },
   };
 };

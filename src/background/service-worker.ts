@@ -1,8 +1,10 @@
-import type { BgResponse, ContentToBg } from '../shared/messages.js';
+import type { BgResponse, BgToContent, ContentToBg } from '../shared/messages.js';
 import { STORAGE_KEYS } from '../shared/constants.js';
 import type { LogLine, RunStats } from '../shared/types.js';
 
 const LOG_CAPACITY = 200;
+const DM_URL = 'https://discord.com/channels/@me/';
+const DISCORD_DM_PREFIX = 'https://discord.com/channels/@me/';
 
 const get = async <T>(key: string): Promise<T | undefined> => {
   const r = await chrome.storage.local.get(key);
@@ -68,10 +70,40 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           sendResponse(ok((await get<boolean>(STORAGE_KEYS.panelCollapsed)) ?? false));
           return;
         }
+        case 'panel:setHidden': {
+          await set(STORAGE_KEYS.panelHidden, m.hidden);
+          sendResponse(ok());
+          return;
+        }
+        case 'panel:getHidden': {
+          sendResponse(ok((await get<boolean>(STORAGE_KEYS.panelHidden)) ?? null));
+          return;
+        }
       }
     } catch (e) {
       sendResponse({ ok: false, error: (e as Error).message });
     }
   })();
   return true;
+});
+
+chrome.action.onClicked.addListener((tab) => {
+  void (async () => {
+    if (!tab?.id) return;
+    const url = tab.url ?? '';
+    if (url.startsWith(DISCORD_DM_PREFIX)) {
+      const msg: BgToContent = { kind: 'panel:toggleVisibility' };
+      try {
+        await chrome.tabs.sendMessage(tab.id, msg);
+      } catch {
+        // Content script may not be loaded yet; nothing else to do.
+      }
+      return;
+    }
+    if (url.startsWith('https://discord.com/')) {
+      await chrome.tabs.update(tab.id, { url: DM_URL });
+      return;
+    }
+    await chrome.tabs.create({ url: DM_URL });
+  })();
 });

@@ -21,6 +21,7 @@ export const RUN_CONFIG = {
 export const STORAGE_KEYS = {
   panelPosition: 'panel.position',
   panelCollapsed: 'panel.collapsed',
+  panelHidden: 'panel.hidden',
   log: 'log.lines',
   stats: 'stats.lastRun',
 } as const;
