@@ -1,4 +1,4 @@
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import { createWriteStream } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -10,7 +10,7 @@ const OUT = resolve(ROOT, 'dist/chrome.zip');
 async function main() {
   await mkdir(resolve(ROOT, 'dist'), { recursive: true });
   const out = createWriteStream(OUT);
-  const archive = archiver('zip', { zlib: { level: 9 } });
+  const archive = new ZipArchive({ zlib: { level: 9 } });
   archive.pipe(out);
   archive.directory(SRC, false);
   await archive.finalize();
