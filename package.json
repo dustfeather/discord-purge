@@ -25,7 +25,7 @@
     "@types/chrome": "^0.1.42",
     "@types/firefox-webext-browser": "^143.0.0",
     "@types/node": "^25.9.1",
-    "@typescript-eslint/eslint-plugin": "^8.59.4",
+    "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.59.2",
     "archiver": "^8.0.0",
     "esbuild": "^0.28.0",
@@ -33,7 +33,7 @@
     "eslint-plugin-security": "^4.0.0",
     "globals": "^17.6.0",
     "prettier": "^3.3.3",
-    "sass": "^1.79.0",
+    "sass": "^1.100.0",
     "sharp": "^0.34.5",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3"
