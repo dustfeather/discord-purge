@@ -18,8 +18,9 @@ jobs:
   tests:
     permissions:
       contents: read
-    uses: dustfeather/shared-workflows/.github/workflows/node-test.yml@v1
+    uses: dustfeather/shared-workflows/.github/workflows/node-test.yml@v2
     with:
+      runner: arc-df-discord-purge
       run-typecheck: false
 
   build:
@@ -101,15 +102,17 @@ jobs:
 
   publish-chrome:
     needs: build
-    uses: dustfeather/shared-workflows/.github/workflows/publish-chrome.yml@v1
+    uses: dustfeather/shared-workflows/.github/workflows/publish-chrome.yml@v2
     with:
+      runner: arc-df-discord-purge
       zip-name: chrome.zip
     secrets: inherit
 
   publish-firefox:
     needs: build
-    uses: dustfeather/shared-workflows/.github/workflows/publish-firefox.yml@v1
+    uses: dustfeather/shared-workflows/.github/workflows/publish-firefox.yml@v2
     with:
+      runner: arc-df-discord-purge
       xpi-name: firefox.xpi
       source-name: discord-purge-source.zip
       addon-id: discord-purge@dustfeather
