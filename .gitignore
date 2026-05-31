@@ -6,3 +6,5 @@ dist/
 .env.*
 !.env.example
 coverage/
+# Added by code-review-graph
+.code-review-graph/
