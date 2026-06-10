@@ -5,7 +5,9 @@
   "description": "Bulk-unsend your own messages from Discord DMs.",
   "license": "GPL-3.0-only",
   "type": "module",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "tsx scripts/build.ts --target=chrome --watch",
     "build:chrome": "tsx scripts/build.ts --target=chrome",
@@ -37,5 +39,10 @@
     "sharp": "^0.34.5",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
+  },
+  "allowScripts": {
+    "@parcel/watcher@2.5.6": true,
+    "esbuild@0.28.0": true,
+    "sharp@0.34.5": true
   }
 }
