@@ -20,7 +20,8 @@
     "pack": "npm run build && npm run pack:chrome && npm run pack:firefox && npm run pack:userscript",
     "icons": "tsx scripts/gen-icons.ts",
     "lint": "eslint . --max-warnings=0 && tsc --noEmit",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "@types/archiver": "^8.0.0",
