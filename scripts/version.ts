@@ -3,13 +3,17 @@ import { readFileSync } from 'node:fs';
 
 /**
  * Resolve the build version, in order of preference:
- *   1. DISCORD_PURGE_VERSION env (CI release-job derived).
- *   2. GITHUB_REF_NAME with leading "v" stripped (manual tag-push fallback).
- *   3. Latest annotated git tag minus the leading "v".
- *   4. package.json version.
- *   5. "0.0.0".
+ *   1. EXT_VERSION env (shared release-extension workflow, highest priority).
+ *   2. DISCORD_PURGE_VERSION env (CI release-job derived).
+ *   3. GITHUB_REF_NAME with leading "v" stripped (manual tag-push fallback).
+ *   4. Latest annotated git tag minus the leading "v".
+ *   5. package.json version.
+ *   6. "0.0.0".
  */
 export function resolveVersion(): string {
+  const ext = process.env['EXT_VERSION'];
+  if (ext && /^v?\d/.test(ext)) return ext.replace(/^v/, '');
+
   const explicit = process.env['DISCORD_PURGE_VERSION'];
   if (explicit && /^\d/.test(explicit)) return explicit.replace(/^v/, '');
 
