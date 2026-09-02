@@ -1,5 +1,7 @@
 # discord-purge
 
+[![Release](https://github.com/dustfeather/discord-purge/actions/workflows/release.yml/badge.svg)](https://github.com/dustfeather/discord-purge/actions/workflows/release.yml)
+
 Bulk-unsend your own messages from Discord 1:1 and group direct-message threads, from a floating panel that visually blends with Discord's own UI.
 
 ![chat-bubble icon, blurple squircle](./assets/icons/icon-128.png)
