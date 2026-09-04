@@ -23,6 +23,8 @@ jobs:
       runner: arc-df-discord-purge
       run-typecheck: false
       run-build: true
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   review:
     if: github.event.action != 'closed'
