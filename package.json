@@ -45,12 +45,5 @@
     "@parcel/watcher@2.5.6": true,
     "esbuild@0.28.0": true,
     "sharp@0.34.5": true
-  },
-  "pnpm": {
-    "overrides": {
-      "brace-expansion": ">=5.0.9",
-      "immutable": ">=5.1.8",
-      "nanoid": ">=3.3.18"
-    }
   }
 }
