@@ -8,8 +8,12 @@ overrides:
   'immutable': '>=5.1.8'
   'nanoid': '>=3.3.18'
 
-# pnpm 12 renamed the build-script allowlist; without this it stops at
-# ERR_PNPM_IGNORED_BUILDS.
+# pnpm 11.0.0 renamed the build-script allowlist onlyBuiltDependencies ->
+# allowBuilds; without it, install stops at ERR_PNPM_IGNORED_BUILDS. Measured,
+# because the version in that sentence used to say 12 and was wrong: pnpm
+# 10.20.0 ships 0 references to allowBuilds and 35 to onlyBuiltDependencies,
+# 11.0.0 ships 77 and 0. Adding onlyBuiltDependencies back "for pnpm 11" is
+# dead config -- 11.19.0 mentions it only in its legacy-key migration list.
 allowBuilds:
   '@parcel/watcher': true
   'esbuild': true
