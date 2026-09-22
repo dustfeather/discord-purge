@@ -13,9 +13,8 @@ concurrency:
 
 jobs:
     release:
-        uses: dustfeather/shared-workflows/.github/workflows/release-extension.yml@v7
+        uses: dustfeather/shared-workflows/.github/workflows/release-extension.yml@v8
         with:
-            runner: arc-df-discord-purge
             targets: '["chrome","firefox","userscript"]'
             addon-id: discord-purge@dustfeather
         secrets: inherit
